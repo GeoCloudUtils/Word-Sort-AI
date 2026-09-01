@@ -1,0 +1,29 @@
+fileFormatVersion: 2
+guid: 154bed9615d8227448a30fbe90f6acdb
+TrueTypeFontImporter:
+  externalObjects: {}
+  serializedVersion: 4
+  fontSize: 16
+  forceTextureCase: -2
+  characterSpacing: 0
+  characterPadding: 1
+  includeFontData: 1
+  fontName: Fredoka One
+  fontNames:
+  - Fredoka One
+  fallbackFontReferences: []
+  customCharacters: 
+  fontRenderingMode: 0
+  ascentCalculationMode: 1
+  useLegacyBoundsCalculation: 0
+  shouldRoundAdvanceValue: 1
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 192991
+  packageName: Casual GUI/ Mobile game UI pack
+  packageVersion: 2.1
+  assetPath: Assets/Casual GUI Mobile game UI pack/Font/FredokaOne-Regular.ttf
+  uploadId: 436123

@@ -1,0 +1,50 @@
+{
+  "words3": [
+    "ACE", "ACT", "ADD", "AGE", "AIR", "ANT", "APE", "ARC", "ARM", "ART",
+    "ASH", "ASK", "BAG", "BAR", "BAT", "BED", "BEE", "BIG", "BIN", "BIT",
+    "BOX", "BOY", "BUS", "CAN", "CAP", "CAR", "CAT", "COW", "CUP", "DAY",
+    "DIG", "DOG", "DRY", "EAR", "EAT", "EGG", "ELF", "END", "FAN", "FAR",
+    "FIN", "FIT", "FIX", "FLY", "FOG", "FOX", "FUN", "GAP", "GAS", "GEM",
+    "GET", "GUM", "HAT", "HEN", "HOP", "HOT", "ICE", "INK", "JAM", "JAR",
+    "JET", "JOB", "JOY", "KEY", "KID", "LEG", "LID", "LOG", "MAP", "MIX",
+    "MOP", "MUD", "NET", "NEW", "NUT", "OAK", "OIL", "OWL", "PAN", "PEN",
+    "PET", "PIE", "PIG", "PIN", "POT", "RED", "RUG", "RUN", "SEA", "SKY",
+    "SUN", "TEA", "TOP", "TOY", "VAN", "WEB", "WIN", "YAK", "ZIP", "ZOO"
+  ],
+  "words4": [
+    "ARCH", "AREA", "ARMY", "BABY", "BACK", "BALL", "BAND", "BANK", "BARN", "BATH",
+    "BEAR", "BELL", "BIRD", "BLUE", "BOAT", "BODY", "BONE", "BOOK", "BOOT", "BOWL",
+    "CAKE", "CAMP", "CARD", "CART", "CAVE", "CHEF", "CITY", "CLAY", "COAT", "CODE",
+    "COIN", "CORN", "CUBE", "DARK", "DESK", "DISH", "DOOR", "DRUM", "DUCK", "DUST",
+    "FARM", "FIRE", "FISH", "FLAG", "FORK", "FROG", "GAME", "GATE", "GIFT", "GIRL",
+    "GOLD", "HAND", "HARE", "HOME", "HOOK", "KITE", "LAMP", "LEAF", "LION", "LOCK",
+    "MILK", "MOON", "NEST", "NOSE", "PARK", "PEAR", "PINK", "RAIN", "RING", "ROAD",
+    "ROCK", "ROPE", "ROSE", "SHIP", "SHOE", "SNOW", "SOCK", "STAR", "SWAN", "TENT",
+    "TREE", "WALL", "WAVE", "WIND", "WOLF", "WOOD", "WORD", "WORM", "YARN", "ZERO",
+    "BUSH", "CAGE", "DEER", "DOLL", "FONT", "GLOW", "HILL", "KING", "LAKE", "MASK"
+  ],
+  "words5": [
+    "APPLE", "BEACH", "BERRY", "BLADE", "BLOCK", "BREAD", "BRICK", "BRUSH", "CAMEL", "CANDY",
+    "CHAIR", "CHEST", "CLOCK", "CLOUD", "CLOWN", "COAST", "CORAL", "CRANE", "CROWN", "DANCE",
+    "DREAM", "DRINK", "EARTH", "FAIRY", "FIELD", "FLAME", "FLOOD", "FLOUR", "FLUTE", "FRAME",
+    "FRUIT", "GHOST", "GLASS", "GLOVE", "GRAPE", "GRASS", "GREEN", "HEART", "HORSE", "HOUSE",
+    "JUICE", "KOALA", "LIGHT", "MAGIC", "MANGO", "METAL", "MOUSE", "MUSIC", "NIGHT", "OCEAN",
+    "PAINT", "PANDA", "PAPER", "PEACH", "PEARL", "PIANO", "PILOT", "PIZZA", "PLANT", "PLATE",
+    "QUEEN", "RADIO", "RIVER", "ROBOT", "SHEEP", "SHELL", "SHIRT", "SNAKE", "SPACE", "SPOON",
+    "STORM", "STRAW", "SUGAR", "TABLE", "TIGER", "TOAST", "TRAIN", "TRUCK", "WATER", "WHALE",
+    "WHEEL", "WITCH", "WORLD", "ZEBRA", "ANGEL", "BLOOM", "CABIN", "EAGLE", "FERRY", "GIANT",
+    "HONEY", "JELLY", "LEMON", "MAPLE", "ONION", "PLUMP", "SHARK", "SMILE", "STONE", "TOWER"
+  ],
+  "words6": [
+    "ANCHOR", "ANIMAL", "BANANA", "BASKET", "BOTTLE", "BRIDGE", "BUTTON", "CAMERA", "CANDLE", "CARPET",
+    "CASTLE", "CHEESE", "CHERRY", "CIRCLE", "COOKIE", "DRAGON", "ERASER", "FAMILY", "FLOWER", "FOREST",
+    "GARDEN", "GUITAR", "HAMMER", "HELMET", "ISLAND", "JACKET", "JUNGLE", "KITTEN", "LADDER", "LAPTOP",
+    "MARKET", "MONKEY", "MOTHER", "NEEDLE", "ORANGE", "PENCIL", "PEPPER", "PILLOW", "PLANET", "POCKET",
+    "POTATO", "RABBIT", "ROCKET", "SCHOOL", "SHADOW", "SILVER", "SISTER", "SPIDER", "SPIRIT", "SQUARE",
+    "STREET", "SUMMER", "TICKET", "TOMATO", "TURTLE", "WINDOW", "WINTER", "WIZARD", "YELLOW", "ZIPPER",
+    "AUTUMN", "BUBBLE", "CIRCUS", "COFFEE", "DESERT", "DINNER", "DONKEY", "ENGINE", "FATHER", "GARLIC",
+    "GOLDEN", "INSECT", "MAGNET", "MARBLE", "MEADOW", "MIRROR", "NAPKIN", "PARROT", "PIRATE", "PURPLE",
+    "RIBBON", "SADDLE", "SECRET", "SPONGE", "SPRING", "TEMPLE", "THRONE", "TUNNEL", "VELVET", "WALNUT",
+    "WALRUS", "WONDER", "BREEZE", "BRONZE", "CANYON", "CEREAL", "CLOVER", "DOMINO", "FROZEN", "GALAXY"
+  ]
+}

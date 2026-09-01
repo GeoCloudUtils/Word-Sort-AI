@@ -1,0 +1,17 @@
+{
+  "androidLevelPlayAppKey": "YOUR_ANDROID_LEVELPLAY_APP_KEY",
+  "iosLevelPlayAppKey": "YOUR_IOS_LEVELPLAY_APP_KEY",
+  "rewardedAdUnitId": "800365478",
+  "interstitialAdUnitId": "800365478",
+  "bannerAdUnitId": "800365478",
+  "smallCoinsProductId": "word_sort.coins.small",
+  "mediumCoinsProductId": "word_sort.coins.medium",
+  "largeCoinsProductId": "word_sort.coins.large",
+  "removeAdsProductId": "word_sort.remove_ads",
+  "privacyPolicyUrl": "YOUR_PRIVACY_POLICY_HTTPS_URL",
+  "smallCoins": 100,
+  "mediumCoins": 500,
+  "largeCoins": 1200,
+  "rewardedCoins": 75,
+  "interstitialEveryCompletedLevels": 1
+}
