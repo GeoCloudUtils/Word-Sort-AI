@@ -1,9 +1,9 @@
 {
-  "androidLevelPlayAppKey": "YOUR_ANDROID_LEVELPLAY_APP_KEY",
+  "androidLevelPlayAppKey": "27e3eff55",
   "iosLevelPlayAppKey": "YOUR_IOS_LEVELPLAY_APP_KEY",
-  "rewardedAdUnitId": "800365478",
-  "interstitialAdUnitId": "800365478",
-  "bannerAdUnitId": "800365478",
+  "rewardedAdUnitId": "w4fd7q68eybcymis",
+  "interstitialAdUnitId": "rxwyvkoz1prb0yl2",
+  "bannerAdUnitId": "4z7bpvntyi2fipv5",
   "smallCoinsProductId": "word_sort.coins.small",
   "mediumCoinsProductId": "word_sort.coins.medium",
   "largeCoinsProductId": "word_sort.coins.large",

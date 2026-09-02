@@ -7,8 +7,8 @@
   </packages>
   <files />
   <settings>
-    <setting name="androidAbis" value="arm64-v8a" />
-    <setting name="bundleId" value="com.DefaultCompany.2DWordSortPuzzle" />
+    <setting name="androidAbis" value="arm64-v8a,armeabi-v7a" />
+    <setting name="bundleId" value="com.overactgames.wordsort.puzzle" />
     <setting name="explodeAars" value="True" />
     <setting name="gradleBuildEnabled" value="True" />
     <setting name="gradlePropertiesTemplateEnabled" value="True" />
