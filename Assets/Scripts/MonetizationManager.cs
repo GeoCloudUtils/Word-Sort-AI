@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Unity.Services.LevelPlay;
 using UnityEngine;
 using UnityEngine.Purchasing;
+#if !UNITY_WEBGL
+using Unity.Services.LevelPlay;
+#endif
 
 namespace WordSortPuzzle
 {
@@ -39,9 +41,11 @@ namespace WordSortPuzzle
         private const string FulfilledPrefix = "word_sort.iap.fulfilled.";
 
         private StoreController store;
+#if !UNITY_WEBGL
         private LevelPlayRewardedAd rewardedAd;
         private LevelPlayInterstitialAd interstitialAd;
         private LevelPlayBannerAd bannerAd;
+#endif
         private Action pendingReward;
         private Action pendingInterstitialCompletion;
         private bool initialized;
@@ -55,7 +59,17 @@ namespace WordSortPuzzle
         public bool HasConsentChoice => PlayerPrefs.HasKey(ConsentChoiceKey);
         public bool PersonalizedAdsAllowed => PlayerPrefs.GetInt(ConsentChoiceKey, 0) == 1;
         public bool AdsRemoved => PlayerPrefs.GetInt(NoAdsKey, 0) == 1;
-        public bool RewardedReady => rewardedAd != null && rewardedAd.IsAdReady();
+        public bool RewardedReady
+        {
+            get
+            {
+#if !UNITY_WEBGL
+                return rewardedAd != null && rewardedAd.IsAdReady();
+#else
+                return false;
+#endif
+            }
+        }
         public bool StoreReady { get; private set; }
         public bool InitializationStarted => initialized;
         public bool InitializationComplete { get; private set; }
@@ -77,15 +91,24 @@ namespace WordSortPuzzle
         {
             PlayerPrefs.SetInt(ConsentChoiceKey, allowPersonalizedAds ? 1 : 0);
             PlayerPrefs.Save();
+#if !UNITY_WEBGL
             if (adsInitialized) LevelPlayPrivacySettings.SetGDPRConsent(allowPersonalizedAds);
+#endif
         }
 
         public void InitializeServices()
         {
-            if (initialized || !HasConsentChoice) return;
+            if (initialized) return;
+#if !UNITY_WEBGL
+            if (!HasConsentChoice) return;
+#endif
             initialized = true;
             SetInitializationProgress("CONNECTING TO STORE", 0.42f);
+#if UNITY_WEBGL
+            SetPurchasingSettled("PURCHASES DISABLED FOR WEBGL");
+#else
             InitializePurchasing();
+#endif
             InitializeAds();
         }
 
@@ -130,6 +153,10 @@ namespace WordSortPuzzle
 
         public void ShowRewardedCoins()
         {
+#if UNITY_WEBGL
+            Report("REWARDED ADS ARE UNAVAILABLE IN WEBGL");
+            return;
+#else
             if (AdsRemoved)
             {
                 Report("REWARDED ADS ARE DISABLED");
@@ -150,12 +177,17 @@ namespace WordSortPuzzle
                 Report($"+{Mathf.Max(1, Config.rewardedCoins)} COINS");
             };
             rewardedAd.ShowAd("shop_rewarded_coins");
+#endif
         }
 
         public void ShowInterstitialIfDue(Action onComplete)
         {
             completedLevelsSinceInterstitial++;
             int interval = Mathf.Max(1, Config.interstitialEveryCompletedLevels);
+#if UNITY_WEBGL
+            onComplete?.Invoke();
+            return;
+#else
             if (AdsRemoved || interstitialAd == null || !interstitialAd.IsAdReady() ||
                 completedLevelsSinceInterstitial < interval)
             {
@@ -166,14 +198,17 @@ namespace WordSortPuzzle
             completedLevelsSinceInterstitial = 0;
             pendingInterstitialCompletion = onComplete;
             interstitialAd.ShowAd("level_complete");
+#endif
         }
 
         public void SetBannerVisible(bool visible)
         {
             bannerShouldBeVisible = visible;
+#if !UNITY_WEBGL
             if (bannerAd == null || AdsRemoved) return;
             if (visible) bannerAd.ShowAd();
             else bannerAd.HideAd();
+#endif
         }
 
         public void OpenPrivacyPolicy()
@@ -283,7 +318,9 @@ namespace WordSortPuzzle
         {
             PlayerPrefs.SetInt(NoAdsKey, 1);
             PlayerPrefs.Save();
+#if !UNITY_WEBGL
             bannerAd?.HideAd();
+#endif
             BalancesChanged?.Invoke();
         }
 
@@ -294,6 +331,10 @@ namespace WordSortPuzzle
 
         private void InitializeAds()
         {
+#if UNITY_WEBGL
+            SetAdsSettled("AD MEDIATION DISABLED FOR WEBGL");
+            return;
+#else
             SetInitializationProgress("INITIALIZING AD MEDIATION", 0.68f);
             if (AdsRemoved)
             {
@@ -316,8 +357,10 @@ namespace WordSortPuzzle
             LevelPlay.OnInitSuccess += OnAdsInitialized;
             LevelPlay.OnInitFailed += OnAdsInitializationFailed;
             LevelPlay.Init(appKey);
+#endif
         }
 
+#if !UNITY_WEBGL
         private void OnAdsInitializationFailed(LevelPlayInitError error)
         {
             Debug.LogError("[Ads] LevelPlay initialization failed: " + error);
@@ -375,6 +418,8 @@ namespace WordSortPuzzle
             SetAdsSettled("AD MEDIATION READY");
         }
 
+#endif
+
         private void SetPurchasingSettled(string message)
         {
             if (purchasingSettled) return;
@@ -404,6 +449,7 @@ namespace WordSortPuzzle
             InitializationCompleted?.Invoke();
         }
 
+#if !UNITY_WEBGL
         private void CompleteInterstitial()
         {
             interstitialAd?.LoadAd();
@@ -411,6 +457,7 @@ namespace WordSortPuzzle
             pendingInterstitialCompletion = null;
             completion?.Invoke();
         }
+#endif
 
         private static bool IsConfigured(string value) =>
             !string.IsNullOrWhiteSpace(value) && !value.Contains("YOUR_");
@@ -423,11 +470,13 @@ namespace WordSortPuzzle
 
         private void OnDestroy()
         {
+#if !UNITY_WEBGL
             LevelPlay.OnInitSuccess -= OnAdsInitialized;
             LevelPlay.OnInitFailed -= OnAdsInitializationFailed;
             rewardedAd?.DestroyAd();
             interstitialAd?.DestroyAd();
             bannerAd?.DestroyAd();
+#endif
         }
     }
 }

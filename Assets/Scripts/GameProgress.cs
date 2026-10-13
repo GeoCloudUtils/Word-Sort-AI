@@ -13,6 +13,7 @@ namespace WordSortPuzzle
         private const string UndoTokensKey = "word_sort.undo_tokens";
         private const string SelectedBackgroundKey = "word_sort.selected_background";
         private const int StartingCoins = 100;
+        private static readonly int[] BackgroundUnlockLevels = { 0, 10, 25, 50, 100 };
 
         public static int HighestUnlocked
         {
@@ -128,14 +129,15 @@ namespace WordSortPuzzle
 
         public static bool IsBackgroundUnlocked(int backgroundIndex)
         {
-            return backgroundIndex == 0 || PlayerPrefs.GetInt(BackgroundKey(backgroundIndex), 0) == 1;
+            if (backgroundIndex < 0 || backgroundIndex >= BackgroundUnlockLevels.Length) return false;
+            int requiredLevel = BackgroundUnlockLevels[backgroundIndex];
+            return requiredLevel == 0 || IsCompleted(requiredLevel - 1);
         }
 
-        public static void UnlockBackground(int backgroundIndex)
+        public static int BackgroundUnlockLevel(int backgroundIndex)
         {
-            if (backgroundIndex <= 0) return;
-            PlayerPrefs.SetInt(BackgroundKey(backgroundIndex), 1);
-            PlayerPrefs.Save();
+            if (backgroundIndex < 0 || backgroundIndex >= BackgroundUnlockLevels.Length) return int.MaxValue;
+            return BackgroundUnlockLevels[backgroundIndex];
         }
 
         public static bool IsCompleted(int levelIndex)
@@ -171,8 +173,6 @@ namespace WordSortPuzzle
 
         private static string RevealedWordKey(int levelIndex, int wordIndex) =>
             $"word_sort.revealed_word.{levelIndex}.{wordIndex}";
-
-        private static string BackgroundKey(int backgroundIndex) => "word_sort.background." + backgroundIndex;
 
         private static void SetBool(string key, bool value)
         {

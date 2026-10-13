@@ -3,6 +3,14 @@
 The game code is complete; replace the placeholders in
 `Assets/Resources/monetization-config.json` before making a store build.
 
+LevelPlay ad mediation is compiled and initialized only for non-WebGL targets.
+WebGL builds, including YouTube Playables builds, skip mediation and continue
+without rewarded, interstitial, or banner ads.
+
+Backgrounds are unlocked by completed levels: Mystic Library after level 10,
+Moon Observatory after level 25, Enchanted Garden after level 50, and Neon
+Alchemy after level 100.
+
 ## Unity LevelPlay
 
 1. In the Unity Dashboard, create/select the Android game and copy its LevelPlay app key.

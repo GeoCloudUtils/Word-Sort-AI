@@ -52,6 +52,12 @@ namespace WordSortPuzzle
         private Sprite settingsIcon, backIcon, undoIcon, resetIcon, gameLogo;
         private MonetizationManager monetization;
 
+#if UNITY_WEBGL
+        private const bool IsPlayableBuild = true;
+#else
+        private const bool IsPlayableBuild = false;
+#endif
+
         private WordLevelDefinition level;
         private List<List<char>> initialStacks;
         private Tube selectedTube;
@@ -69,8 +75,6 @@ namespace WordSortPuzzle
 
         private static readonly string[] BackgroundNames =
             { "CLASSIC", "MYSTIC LIBRARY", "MOON OBSERVATORY", "ENCHANTED GARDEN", "NEON ALCHEMY" };
-
-        private static readonly int[] BackgroundCosts = { 0, 150, 225, 300, 400 };
 
         private const float LiftDuration = 0.18f;
         private const float TravelDuration = 0.24f;
@@ -109,7 +113,7 @@ namespace WordSortPuzzle
 
         private void Start()
         {
-            if (monetization.HasConsentChoice) BeginStartupLoading();
+            if (IsPlayableBuild || monetization.HasConsentChoice) BeginStartupLoading();
             else ShowPrivacyChoices();
         }
 
@@ -198,10 +202,14 @@ namespace WordSortPuzzle
             Stretch(backgroundScreen);
             BuildBackgroundScreen();
             BuildSettingsPanel();
+#if !UNITY_WEBGL
             BuildShopPanel();
+#endif
             BuildWinPanel();
             BuildLoadingPanel();
+#if !UNITY_WEBGL
             BuildPrivacyPanel();
+#endif
         }
 
         private void BuildMainMenu()
@@ -230,8 +238,10 @@ namespace WordSortPuzzle
                 : GameProgress.CurrentLevel));
             Button levels = CreateButton(mainScreen, "LEVELS", new Vector2(0, -285), new Vector2(600, 115), Blue, 42);
             levels.onClick.AddListener(ShowLevelSelect);
+#if !UNITY_WEBGL
             Button shop = CreateButton(mainScreen, "SHOP", new Vector2(0, -425), new Vector2(600, 105), Gold, 38);
             shop.onClick.AddListener(ShowShop);
+#endif
             Button backgrounds = CreateButton(mainScreen, "BACKGROUNDS", new Vector2(0, -555),
                 new Vector2(600, 100), Green, 35);
             backgrounds.onClick.AddListener(ShowBackgroundSelect);
@@ -241,7 +251,9 @@ namespace WordSortPuzzle
             mainProgressText = AddText("Progress", mainScreen, string.Empty, 29, FontStyles.Normal);
             SetRect(mainProgressText.rectTransform, new Vector2(0, -775), new Vector2(850, 55));
             mainProgressText.color = Muted;
+#if !UNITY_WEBGL
             CreateCoinBadge(mainScreen, new Vector2(365, 755), true);
+#endif
             TextMeshProUGUI footer = AddText("Footer", mainScreen, "200 LEVELS  •  3–6 LETTER WORDS", 25,
                 FontStyles.Bold);
             SetRect(footer.rectTransform, new Vector2(0, -855), new Vector2(900, 50));
@@ -308,7 +320,9 @@ namespace WordSortPuzzle
             Button settings = CreateButton(playScreen, "SET", new Vector2(465, 885), new Vector2(92, 82), PanelLight,
                 26);
             settings.onClick.AddListener(ShowSettings);
+#if !UNITY_WEBGL
             CreateCoinBadge(playScreen, new Vector2(300, 885), true);
+#endif
             TextMeshProUGUI goal = AddText("Goal", playScreen, "FIND THE WORDS", 30, FontStyles.Bold);
             SetRect(goal.rectTransform, new Vector2(0, 795), new Vector2(600, 55));
             goal.color = Muted;
@@ -412,9 +426,8 @@ namespace WordSortPuzzle
             back.onClick.AddListener(ShowMainMenu);
             TextMeshProUGUI title = AddText("Title", backgroundScreen, "BACKGROUNDS", 56, FontStyles.Bold);
             SetRect(title.rectTransform, new Vector2(0, 865), new Vector2(650, 85));
-            CreateCoinBadge(backgroundScreen, new Vector2(390, 865), true);
             TextMeshProUGUI subtitle = AddText("Subtitle", backgroundScreen,
-                "CHOOSE A THEME  •  UNLOCK NEW ONES WITH COINS", 26, FontStyles.Bold);
+                "CHOOSE A THEME  •  UNLOCK NEW ONES BY PASSING LEVELS", 26, FontStyles.Bold);
             SetRect(subtitle.rectTransform, new Vector2(0, 775), new Vector2(950, 55));
             subtitle.color = Muted;
 
@@ -480,9 +493,11 @@ namespace WordSortPuzzle
             soundValueText = CreateSettingRow(card.rectTransform, "SOUND", 160, ToggleSound);
             musicValueText = CreateSettingRow(card.rectTransform, "BACKGROUND MUSIC", 25, ToggleMusic);
             vibrationValueText = CreateSettingRow(card.rectTransform, "VIBRATION", -110, ToggleVibration);
+#if !UNITY_WEBGL
             Button privacy = CreateButton(card.rectTransform, "PRIVACY CHOICES", new Vector2(0, -245),
                 new Vector2(520, 82), Blue, 28);
             privacy.onClick.AddListener(ShowPrivacyChoices);
+#endif
             TextMeshProUGUI note = AddText("Note", card.rectTransform, "PROGRESS IS SAVED AUTOMATICALLY", 25,
                 FontStyles.Bold);
             SetRect(note.rectTransform, new Vector2(0, -365), new Vector2(700, 60));
@@ -681,6 +696,7 @@ namespace WordSortPuzzle
 
         private void ShowPrivacyChoices()
         {
+            if (IsPlayableBuild || privacyPanel == null) return;
             HidePanelInstant(settingsPanel);
             ShowPanel(privacyPanel);
             privacyPanel.transform.SetAsLastSibling();
@@ -785,14 +801,9 @@ namespace WordSortPuzzle
             if (backgroundIndex < 0 || backgroundIndex >= BackgroundNames.Length) return;
             if (!GameProgress.IsBackgroundUnlocked(backgroundIndex))
             {
-                int cost = BackgroundCosts[backgroundIndex];
-                if (!GameProgress.TrySpendCoins(cost))
-                {
-                    ShowShop();
-                    return;
-                }
-
-                GameProgress.UnlockBackground(backgroundIndex);
+                helperText.text = $"PASS LEVEL {GameProgress.BackgroundUnlockLevel(backgroundIndex)} TO UNLOCK";
+                helperText.color = Muted;
+                return;
             }
 
             GameProgress.SelectedBackground = backgroundIndex;
@@ -810,7 +821,8 @@ namespace WordSortPuzzle
             {
                 bool unlocked = GameProgress.IsBackgroundUnlocked(view.Index);
                 bool isSelected = selected == view.Index;
-                view.Label.text = isSelected ? "SELECTED" : unlocked ? "USE" : $"{BackgroundCosts[view.Index]} COINS";
+                view.Label.text = isSelected ? "SELECTED" : unlocked ? "USE" :
+                    $"PASS LEVEL {GameProgress.BackgroundUnlockLevel(view.Index)}";
                 view.Button.interactable = !isSelected;
                 view.Card.color = isSelected ? new Color32(75, 54, 145, 255) : Panel;
             }
@@ -1360,7 +1372,7 @@ namespace WordSortPuzzle
 
         private static void VibrateIfEnabled()
         {
-#if !UNITY_EDITOR
+#if !UNITY_EDITOR && (UNITY_ANDROID || UNITY_IOS)
             if (GameProgress.Vibration) Handheld.Vibrate();
 #endif
         }
@@ -1441,6 +1453,7 @@ namespace WordSortPuzzle
 
         private void ShowShop()
         {
+            if (IsPlayableBuild || shopPanel == null) return;
             RefreshCoinText();
             RefreshUndoText();
             RefreshShopPrices();
