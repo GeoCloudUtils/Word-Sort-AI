@@ -28,6 +28,9 @@ namespace WordSortPuzzle
         private readonly List<LevelButtonView> levelButtons = new List<LevelButtonView>();
         private readonly List<TextMeshProUGUI> coinTexts = new List<TextMeshProUGUI>();
         private readonly List<RectTransform> loadingTiles = new List<RectTransform>();
+        private readonly List<Sprite> generatedUiIcons = new List<Sprite>();
+        private readonly List<RectTransform> mainAmbientElements = new List<RectTransform>();
+        private readonly List<Button> mainMenuButtons = new List<Button>();
         private readonly Stack<MoveRecord> undoStack = new Stack<MoveRecord>();
         private readonly HashSet<int> hiddenWordIndices = new HashSet<int>();
         private readonly List<BackgroundCardView> backgroundCards = new List<BackgroundCardView>();
@@ -35,8 +38,9 @@ namespace WordSortPuzzle
         private RectTransform gameRoot, mainScreen, levelScreen, playScreen, backgroundScreen;
         private RectTransform targetContainer, boardHost, boardContent, piecesLayer;
         private Image sceneBackground, backgroundShade;
-        private CanvasGroup settingsPanel, shopPanel, winPanel, loadingPanel, privacyPanel;
+        private CanvasGroup settingsPanel, resetProgressPanel, shopPanel, winPanel, loadingPanel, privacyPanel;
         private TextMeshProUGUI mainProgressText, levelTitleText, helperText, moveText;
+        private TextMeshProUGUI timerText, wordCompleteToastText;
         private TextMeshProUGUI winTitleText, winStatsText, nextButtonText;
         private TextMeshProUGUI soundValueText, musicValueText, vibrationValueText;
         private TextMeshProUGUI undoButtonText, shopUndoText, shopStatusText;
@@ -44,12 +48,18 @@ namespace WordSortPuzzle
         private TextMeshProUGUI loadingStatusText;
         private Image loadingProgressFill;
         private RectTransform loadingSpinner;
+        private RectTransform wordCompleteToastCard;
+        private RectTransform mainLogoRect;
+        private Vector2 mainLogoBasePosition;
+        private CanvasGroup wordCompleteToast;
         private AudioSource uiAudio, musicAudio;
         private AudioClip clickClip, successClip;
         private Sprite[] backgroundSprites;
         private Sprite roundedButtonSprite;
         private Texture2D roundedButtonTexture;
-        private Sprite settingsIcon, backIcon, undoIcon, resetIcon, gameLogo;
+        private Sprite playIcon, levelsIcon, backgroundsIcon, settingsIcon, backIcon, timerIcon, undoIcon, resetIcon;
+        private Sprite soundIcon, musicIcon, vibrationIcon, privacyIcon, trophyIcon, coinIcon, hintIcon, homeIcon;
+        private Sprite gameLogo;
         private MonetizationManager monetization;
 
 #if UNITY_WEBGL
@@ -62,13 +72,18 @@ namespace WordSortPuzzle
         private List<List<char>> initialStacks;
         private Tube selectedTube;
         private Tube bonusTube;
-        private int currentLevelIndex, moves, completionReward, freeUndosRemaining;
+        private int currentLevelIndex, moves, completionReward, completionUndoReward, freeUndosRemaining;
+        private float levelElapsedSeconds;
+        private int lastDisplayedTimerSecond = -1;
         private bool isAnimating, hasWon, isLoading;
+        private bool levelTimerRunning;
         private Coroutine startupRoutine;
 
         private const int BonusTubeCost = 50;
         private const int FirstCompletionReward = 15;
         private const int FreeUndosPerLevel = 5;
+        private const int LowUndoReserveThreshold = 2;
+        private const int LowUndoCompletionGrant = 1;
         private const int UndoPackAmount = 5;
         private const int UndoPackCost = 75;
         private const int RevealBaseCost = 15;
@@ -117,6 +132,20 @@ namespace WordSortPuzzle
             else ShowPrivacyChoices();
         }
 
+        private void Update()
+        {
+            if (!levelTimerRunning || isLoading || playScreen == null || !playScreen.gameObject.activeSelf) return;
+            if (settingsPanel != null && settingsPanel.gameObject.activeSelf) return;
+            if (resetProgressPanel != null && resetProgressPanel.gameObject.activeSelf) return;
+            if (shopPanel != null && shopPanel.gameObject.activeSelf) return;
+
+            levelElapsedSeconds += Time.unscaledDeltaTime;
+            int displayedSecond = Mathf.FloorToInt(levelElapsedSeconds);
+            if (displayedSecond == lastDisplayedTimerSecond) return;
+            lastDisplayedTimerSecond = displayedSecond;
+            RefreshTimerText();
+        }
+
         private void OnDestroy()
         {
             if (monetization != null)
@@ -131,10 +160,9 @@ namespace WordSortPuzzle
             if (loadingPanel != null) DOTween.Kill(loadingPanel, false);
             if (roundedButtonSprite != null) Destroy(roundedButtonSprite);
             if (roundedButtonTexture != null) Destroy(roundedButtonTexture);
-            if (settingsIcon != null) Destroy(settingsIcon);
-            if (backIcon != null) Destroy(backIcon);
-            if (undoIcon != null) Destroy(undoIcon);
-            if (resetIcon != null) Destroy(resetIcon);
+            foreach (Sprite icon in generatedUiIcons)
+                if (icon != null)
+                    Destroy(icon);
             if (gameLogo != null) Destroy(gameLogo);
         }
 
@@ -202,6 +230,7 @@ namespace WordSortPuzzle
             Stretch(backgroundScreen);
             BuildBackgroundScreen();
             BuildSettingsPanel();
+            BuildResetProgressPanel();
 #if !UNITY_WEBGL
             BuildShopPanel();
 #endif
@@ -214,6 +243,7 @@ namespace WordSortPuzzle
 
         private void BuildMainMenu()
         {
+            BuildMainMenuAmbience();
             TextMeshProUGUI eyebrow = AddText("Eyebrow", mainScreen, "A RELAXING WORD PUZZLE", 30, FontStyles.Bold);
             SetRect(eyebrow.rectTransform, new Vector2(0, 720), new Vector2(800, 55));
             eyebrow.color = Cyan;
@@ -221,7 +251,9 @@ namespace WordSortPuzzle
             if (gameLogo != null)
             {
                 Image logo = AddImage("Word Sort Logo", mainScreen, gameLogo, Color.white);
-                SetRect(logo.rectTransform, new Vector2(0, 390), new Vector2(820, 615));
+                mainLogoRect = logo.rectTransform;
+                mainLogoBasePosition = new Vector2(0, 390);
+                SetRect(mainLogoRect, mainLogoBasePosition, new Vector2(800, 535));
                 logo.preserveAspect = true;
                 logo.raycastTarget = false;
             }
@@ -233,23 +265,33 @@ namespace WordSortPuzzle
             }
 
             Button play = CreateButton(mainScreen, "PLAY", new Vector2(0, -120), new Vector2(600, 130), Purple, 49);
+            ConfigureMainMenuButton(play);
             play.onClick.AddListener(() => LoadLevel(enableLevelTesting
                 ? Mathf.Clamp(testLevelNumber - 1, 0, WordLevelCatalog.TotalLevels - 1)
                 : GameProgress.CurrentLevel));
             Button levels = CreateButton(mainScreen, "LEVELS", new Vector2(0, -285), new Vector2(600, 115), Blue, 42);
+            ConfigureMainMenuButton(levels);
             levels.onClick.AddListener(ShowLevelSelect);
 #if !UNITY_WEBGL
             Button shop = CreateButton(mainScreen, "SHOP", new Vector2(0, -425), new Vector2(600, 105), Gold, 38);
+            ConfigureMainMenuButton(shop);
             shop.onClick.AddListener(ShowShop);
 #endif
             Button backgrounds = CreateButton(mainScreen, "BACKGROUNDS", new Vector2(0, -555),
                 new Vector2(600, 100), Green, 35);
+            ConfigureMainMenuButton(backgrounds);
             backgrounds.onClick.AddListener(ShowBackgroundSelect);
             Button settings = CreateButton(mainScreen, "SETTINGS", new Vector2(0, -675), new Vector2(600, 90),
                 PanelLight, 38);
+            ConfigureMainMenuButton(settings);
             settings.onClick.AddListener(ShowSettings);
-            mainProgressText = AddText("Progress", mainScreen, string.Empty, 29, FontStyles.Normal);
-            SetRect(mainProgressText.rectTransform, new Vector2(0, -775), new Vector2(850, 55));
+            Image progressCard = AddImage("Progress Card", mainScreen, roundedButtonSprite,
+                new Color32(39, 29, 88, 225));
+            progressCard.type = Image.Type.Sliced;
+            SetRect(progressCard.rectTransform, new Vector2(0, -775), new Vector2(760, 68));
+            progressCard.raycastTarget = false;
+            mainProgressText = AddText("Progress", progressCard.rectTransform, string.Empty, 27, FontStyles.Bold);
+            Stretch(mainProgressText.rectTransform, new Vector2(12, 6), new Vector2(-12, -6));
             mainProgressText.color = Muted;
 #if !UNITY_WEBGL
             CreateCoinBadge(mainScreen, new Vector2(365, 755), true);
@@ -258,6 +300,49 @@ namespace WordSortPuzzle
                 FontStyles.Bold);
             SetRect(footer.rectTransform, new Vector2(0, -855), new Vector2(900, 50));
             footer.color = new Color32(133, 124, 181, 255);
+        }
+
+        private void BuildMainMenuAmbience()
+        {
+            Vector2[] bubblePositions =
+            {
+                new Vector2(-430, 510), new Vector2(425, 420), new Vector2(-380, 90),
+                new Vector2(410, -80), new Vector2(-445, -500), new Vector2(430, -650)
+            };
+            float[] bubbleSizes = { 28f, 42f, 22f, 34f, 48f, 25f };
+            for (int i = 0; i < bubblePositions.Length; i++)
+            {
+                Image bubble = AddImage("Ambient Bubble", mainScreen, roundedButtonSprite,
+                    i % 2 == 0 ? new Color32(72, 215, 255, 42) : new Color32(166, 93, 255, 38));
+                bubble.type = Image.Type.Sliced;
+                SetRect(bubble.rectTransform, bubblePositions[i], new Vector2(bubbleSizes[i], bubbleSizes[i]));
+                bubble.raycastTarget = false;
+                mainAmbientElements.Add(bubble.rectTransform);
+            }
+
+            Vector2[] wispPositions = { new Vector2(-420, 275), new Vector2(390, 120), new Vector2(-410, -275) };
+            for (int i = 0; i < wispPositions.Length; i++)
+            {
+                Image wisp = AddImage("Ambient Wind Wisp", mainScreen, roundedButtonSprite,
+                    new Color32(84, 199, 255, 30));
+                wisp.type = Image.Type.Sliced;
+                SetRect(wisp.rectTransform, wispPositions[i], new Vector2(145 - i * 18, 11));
+                wisp.rectTransform.localRotation = Quaternion.Euler(0, 0, i % 2 == 0 ? 8f : -7f);
+                wisp.raycastTarget = false;
+                mainAmbientElements.Add(wisp.rectTransform);
+            }
+        }
+
+        private void ConfigureMainMenuButton(Button button)
+        {
+            if (button == null) return;
+            RectTransform buttonRect = button.GetComponent<RectTransform>();
+            TextMeshProUGUI label = button.GetComponentInChildren<TextMeshProUGUI>();
+            if (buttonRect == null || label == null) return;
+            SetRect(label.rectTransform, new Vector2(55f, 0f),
+                new Vector2(380f, Mathf.Max(48f, buttonRect.sizeDelta.y - 12f)));
+            label.alignment = TextAlignmentOptions.MidlineLeft;
+            mainMenuButtons.Add(button);
         }
 
         private void BuildLevelSelect()
@@ -313,16 +398,35 @@ namespace WordSortPuzzle
 
         private void BuildPlayScreen()
         {
+            Image topBar = AddImage("Top HUD", playScreen, roundedButtonSprite, new Color32(42, 29, 96, 238));
+            topBar.type = Image.Type.Sliced;
+            SetRect(topBar.rectTransform, new Vector2(0, 883), new Vector2(1040, 118));
+            topBar.raycastTarget = false;
+
             Button menu = CreateButton(playScreen, "‹", new Vector2(-465, 885), new Vector2(92, 82), PanelLight, 58);
             menu.onClick.AddListener(ShowMainMenu);
             levelTitleText = AddText("Level", playScreen, "LEVEL 1", 47, FontStyles.Bold);
-            SetRect(levelTitleText.rectTransform, new Vector2(0, 887), new Vector2(610, 80));
+            SetRect(levelTitleText.rectTransform, new Vector2(0, 887), new Vector2(340, 80));
             Button settings = CreateButton(playScreen, "SET", new Vector2(465, 885), new Vector2(92, 82), PanelLight,
                 26);
             settings.onClick.AddListener(ShowSettings);
 #if !UNITY_WEBGL
-            CreateCoinBadge(playScreen, new Vector2(300, 885), true);
+            CreateCoinBadge(playScreen, new Vector2(280, 885), true);
 #endif
+            Image timerPill = AddImage("Timer", playScreen, roundedButtonSprite, new Color32(29, 105, 165, 245));
+            timerPill.type = Image.Type.Sliced;
+            SetRect(timerPill.rectTransform, new Vector2(-300, 885), new Vector2(220, 76));
+            timerPill.raycastTarget = false;
+            if (timerIcon != null)
+            {
+                Image clock = AddImage("Icon", timerPill.rectTransform, timerIcon, Color.white);
+                SetRect(clock.rectTransform, new Vector2(-70, 0), new Vector2(58, 58));
+                clock.preserveAspect = true;
+                clock.raycastTarget = false;
+            }
+            timerText = AddText("Time", timerPill.rectTransform, "00:00", 29, FontStyles.Bold);
+            SetRect(timerText.rectTransform, new Vector2(35, 0), new Vector2(125, 58));
+
             TextMeshProUGUI goal = AddText("Goal", playScreen, "FIND THE WORDS", 30, FontStyles.Bold);
             SetRect(goal.rectTransform, new Vector2(0, 795), new Vector2(600, 55));
             goal.color = Muted;
@@ -334,8 +438,13 @@ namespace WordSortPuzzle
             boardHost = CreateRect("Board Host", playScreen);
             SetRect(boardHost, new Vector2(0, -25), new Vector2(1060, 1140));
             // Keep all gameplay actions in one balanced row and leave the bottom safe area for the ad banner.
-            moveText = AddText("Moves", playScreen, "MOVES: 0", 31, FontStyles.Bold);
-            SetRect(moveText.rectTransform, new Vector2(0, -735), new Vector2(310, 112));
+            Image movePill = AddImage("Move Counter", playScreen, roundedButtonSprite,
+                new Color32(52, 38, 112, 245));
+            movePill.type = Image.Type.Sliced;
+            SetRect(movePill.rectTransform, new Vector2(0, -735), new Vector2(260, 96));
+            movePill.raycastTarget = false;
+            moveText = AddText("Moves", movePill.rectTransform, "MOVES: 0", 29, FontStyles.Bold);
+            Stretch(moveText.rectTransform, new Vector2(12, 8), new Vector2(-12, -8));
             moveText.color = Color.white;
 
             Button undo = CreateButton(playScreen, "UNDO", new Vector2(-275, -735), new Vector2(112, 112),
@@ -345,6 +454,36 @@ namespace WordSortPuzzle
             Button reset = CreateButton(playScreen, "RESET", new Vector2(275, -735), new Vector2(112, 112), Purple,
                 24);
             reset.onClick.AddListener(ResetLevel);
+            BuildWordCompleteToast();
+        }
+
+        private void BuildWordCompleteToast()
+        {
+            Image toast = AddImage("Word Complete Toast", playScreen, roundedButtonSprite,
+                new Color32(28, 129, 128, 250));
+            toast.type = Image.Type.Sliced;
+            wordCompleteToastCard = toast.rectTransform;
+            SetRect(wordCompleteToastCard, new Vector2(0, 470), new Vector2(650, 150));
+            wordCompleteToast = toast.gameObject.AddComponent<CanvasGroup>();
+            wordCompleteToast.alpha = 0f;
+            wordCompleteToast.interactable = false;
+            wordCompleteToast.blocksRaycasts = false;
+            toast.gameObject.SetActive(false);
+
+            if (trophyIcon != null)
+            {
+                Image icon = AddImage("Trophy", toast.rectTransform, trophyIcon, Color.white);
+                SetRect(icon.rectTransform, new Vector2(-240, 0), new Vector2(110, 110));
+                icon.preserveAspect = true;
+                icon.raycastTarget = false;
+            }
+
+            TextMeshProUGUI eyebrow = AddText("Eyebrow", toast.rectTransform, "WORD COMPLETE", 24,
+                FontStyles.Bold);
+            SetRect(eyebrow.rectTransform, new Vector2(55, 33), new Vector2(430, 42));
+            eyebrow.color = new Color32(188, 255, 250, 255);
+            wordCompleteToastText = AddText("Word", toast.rectTransform, "WORD", 46, FontStyles.Bold);
+            SetRect(wordCompleteToastText.rectTransform, new Vector2(55, -25), new Vector2(430, 65));
         }
 
         private void LoadBackgroundAssets()
@@ -358,13 +497,51 @@ namespace WordSortPuzzle
 
         private void LoadInterfaceIcons()
         {
-            settingsIcon = CreateRuntimeSprite("WordSortUI/settings", "Settings Icon");
-            backIcon = CreateRuntimeSprite("WordSortUI/back", "Back Icon");
-            undoIcon = CreateRuntimeSprite("WordSortUI/undo-generated", "Generated Undo Icon");
-            resetIcon = CreateRuntimeSprite("WordSortUI/reset", "Reset Icon");
-            // Crop the generated transparent canvas to its visible logo bounds.
-            gameLogo = CreateRuntimeSprite("WordSortUI/word-sort-logo", "Word Sort Logo",
-                new Rect(15f, 281f, 1169f, 876f));
+            Texture2D atlas = Resources.Load<Texture2D>("WordSortUI/ui-icon-atlas");
+            if (atlas != null)
+            {
+                playIcon = CreateAtlasSprite(atlas, 0, "Play Icon");
+                levelsIcon = CreateAtlasSprite(atlas, 1, "Levels Icon");
+                backgroundsIcon = CreateAtlasSprite(atlas, 2, "Backgrounds Icon");
+                settingsIcon = CreateAtlasSprite(atlas, 3, "Settings Icon");
+                backIcon = CreateAtlasSprite(atlas, 4, "Back Icon");
+                timerIcon = CreateAtlasSprite(atlas, 5, "Timer Icon");
+                undoIcon = CreateAtlasSprite(atlas, 6, "Undo Icon");
+                resetIcon = CreateAtlasSprite(atlas, 7, "Reset Icon");
+                soundIcon = CreateAtlasSprite(atlas, 8, "Sound Icon");
+                musicIcon = CreateAtlasSprite(atlas, 9, "Music Icon");
+                vibrationIcon = CreateAtlasSprite(atlas, 10, "Vibration Icon");
+                privacyIcon = CreateAtlasSprite(atlas, 11, "Privacy Icon");
+                trophyIcon = CreateAtlasSprite(atlas, 12, "Trophy Icon");
+                coinIcon = CreateAtlasSprite(atlas, 13, "Coin Icon");
+                hintIcon = CreateAtlasSprite(atlas, 14, "Hint Icon");
+                homeIcon = CreateAtlasSprite(atlas, 15, "Home Icon");
+            }
+            else
+            {
+                settingsIcon = CreateRuntimeSprite("WordSortUI/settings", "Settings Icon");
+                backIcon = CreateRuntimeSprite("WordSortUI/back", "Back Icon");
+                undoIcon = CreateRuntimeSprite("WordSortUI/undo-generated", "Generated Undo Icon");
+                resetIcon = CreateRuntimeSprite("WordSortUI/reset", "Reset Icon");
+            }
+            gameLogo = CreateRuntimeSprite("WordSortUI/word-sort-logo-v2", "Word Sort Logo V2");
+        }
+
+        private Sprite CreateAtlasSprite(Texture2D atlas, int index, string spriteName)
+        {
+            const int columns = 4;
+            const int rows = 4;
+            float cellWidth = atlas.width / (float)columns;
+            float cellHeight = atlas.height / (float)rows;
+            int column = index % columns;
+            int rowFromTop = index / columns;
+            Rect rect = new Rect(column * cellWidth, (rows - 1 - rowFromTop) * cellHeight,
+                cellWidth, cellHeight);
+            Sprite sprite = Sprite.Create(atlas, rect, new Vector2(0.5f, 0.5f), 100f);
+            sprite.name = spriteName;
+            sprite.hideFlags = HideFlags.HideAndDontSave;
+            generatedUiIcons.Add(sprite);
+            return sprite;
         }
 
         private static Sprite CreateRuntimeSprite(string resourcePath, string spriteName, Rect? crop = null)
@@ -483,26 +660,61 @@ namespace WordSortPuzzle
             Image blocker = AddImage("Settings Overlay", gameRoot, null, new Color32(9, 7, 29, 225));
             Stretch(blocker.rectTransform);
             settingsPanel = blocker.gameObject.AddComponent<CanvasGroup>();
-            Image card = AddImage("Card", blocker.rectTransform, null, Panel);
-            SetRect(card.rectTransform, Vector2.zero, new Vector2(850, 930));
+            Image card = AddImage("Card", blocker.rectTransform, roundedButtonSprite, Panel);
+            card.type = Image.Type.Sliced;
+            SetRect(card.rectTransform, Vector2.zero, new Vector2(850, 1050));
             TextMeshProUGUI title = AddText("Title", card.rectTransform, "SETTINGS", 65, FontStyles.Bold);
-            SetRect(title.rectTransform, new Vector2(0, 315), new Vector2(600, 90));
-            Button close = CreateButton(card.rectTransform, "×", new Vector2(350, 330), new Vector2(90, 80), PanelLight,
+            SetRect(title.rectTransform, new Vector2(0, 385), new Vector2(600, 90));
+            Button close = CreateButton(card.rectTransform, "×", new Vector2(350, 400), new Vector2(90, 80), PanelLight,
                 55);
             close.onClick.AddListener(HideSettings);
-            soundValueText = CreateSettingRow(card.rectTransform, "SOUND", 160, ToggleSound);
-            musicValueText = CreateSettingRow(card.rectTransform, "BACKGROUND MUSIC", 25, ToggleMusic);
-            vibrationValueText = CreateSettingRow(card.rectTransform, "VIBRATION", -110, ToggleVibration);
+            soundValueText = CreateSettingRow(card.rectTransform, "SOUND", 220, ToggleSound);
+            musicValueText = CreateSettingRow(card.rectTransform, "BACKGROUND MUSIC", 85, ToggleMusic);
+            vibrationValueText = CreateSettingRow(card.rectTransform, "VIBRATION", -50, ToggleVibration);
 #if !UNITY_WEBGL
-            Button privacy = CreateButton(card.rectTransform, "PRIVACY CHOICES", new Vector2(0, -245),
+            Button privacy = CreateButton(card.rectTransform, "PRIVACY CHOICES", new Vector2(0, -185),
                 new Vector2(520, 82), Blue, 28);
             privacy.onClick.AddListener(ShowPrivacyChoices);
 #endif
+            Button resetProgress = CreateButton(card.rectTransform, "RESET PROGRESS", new Vector2(0, -310),
+                new Vector2(520, 82), Danger, 28);
+            resetProgress.onClick.AddListener(ShowResetProgressConfirmation);
             TextMeshProUGUI note = AddText("Note", card.rectTransform, "PROGRESS IS SAVED AUTOMATICALLY", 25,
                 FontStyles.Bold);
-            SetRect(note.rectTransform, new Vector2(0, -365), new Vector2(700, 60));
+            SetRect(note.rectTransform, new Vector2(0, -440), new Vector2(700, 60));
             note.color = Muted;
             HidePanelInstant(settingsPanel);
+        }
+
+        private void BuildResetProgressPanel()
+        {
+            Image blocker = AddImage("Reset Progress Overlay", gameRoot, null, new Color32(9, 7, 29, 240));
+            Stretch(blocker.rectTransform);
+            resetProgressPanel = blocker.gameObject.AddComponent<CanvasGroup>();
+            Image card = AddImage("Card", blocker.rectTransform, roundedButtonSprite, Panel);
+            card.type = Image.Type.Sliced;
+            SetRect(card.rectTransform, Vector2.zero, new Vector2(850, 660));
+
+            TextMeshProUGUI title = AddText("Title", card.rectTransform, "RESET PROGRESS?", 55, FontStyles.Bold);
+            SetRect(title.rectTransform, new Vector2(0, 220), new Vector2(720, 85));
+            title.color = Danger;
+
+            TextMeshProUGUI warning = AddText("Warning", card.rectTransform,
+                "ALL COMPLETED LEVELS, BEST MOVES, REVEALED WORDS,\nAND BONUS TUBES WILL BE CLEARED.\n\nCOINS, EXTRA UNDOS, SETTINGS, AND PURCHASES WILL STAY.",
+                27, FontStyles.Bold);
+            SetRect(warning.rectTransform, new Vector2(0, 45), new Vector2(740, 245));
+            warning.color = Muted;
+            warning.enableAutoSizing = true;
+            warning.fontSizeMin = 20f;
+            warning.fontSizeMax = 27f;
+
+            Button cancel = CreateButton(card.rectTransform, "CANCEL", new Vector2(-190, -225),
+                new Vector2(330, 95), PanelLight, 31);
+            cancel.onClick.AddListener(() => HidePanel(resetProgressPanel));
+            Button confirm = CreateButton(card.rectTransform, "RESET", new Vector2(190, -225),
+                new Vector2(330, 95), Danger, 31);
+            confirm.onClick.AddListener(ConfirmResetProgress);
+            HidePanelInstant(resetProgressPanel);
         }
 
         private void BuildShopPanel()
@@ -510,7 +722,8 @@ namespace WordSortPuzzle
             Image blocker = AddImage("Shop Overlay", gameRoot, null, new Color32(9, 7, 29, 232));
             Stretch(blocker.rectTransform);
             shopPanel = blocker.gameObject.AddComponent<CanvasGroup>();
-            Image card = AddImage("Card", blocker.rectTransform, null, Panel);
+            Image card = AddImage("Card", blocker.rectTransform, roundedButtonSprite, Panel);
+            card.type = Image.Type.Sliced;
             SetRect(card.rectTransform, Vector2.zero, new Vector2(900, 1560));
             TextMeshProUGUI title = AddText("Title", card.rectTransform, "COIN SHOP", 64, FontStyles.Bold);
             SetRect(title.rectTransform, new Vector2(0, 665), new Vector2(650, 90));
@@ -537,9 +750,10 @@ namespace WordSortPuzzle
 
             Image rewardedRow = AddImage("Rewarded Coins", card.rectTransform, null, BackgroundLight);
             SetRect(rewardedRow.rectTransform, new Vector2(0, -125), new Vector2(760, 130));
+            AddRowIcon(rewardedRow.rectTransform, coinIcon);
             TextMeshProUGUI rewardedLabel = AddText("Label", rewardedRow.rectTransform,
                 $"FREE COINS\n+{monetization.Config.rewardedCoins} COINS", 29, FontStyles.Bold);
-            SetRect(rewardedLabel.rectTransform, new Vector2(-170, 0), new Vector2(390, 100));
+            SetRect(rewardedLabel.rectTransform, new Vector2(-90, 0), new Vector2(310, 100));
             rewardedLabel.alignment = TextAlignmentOptions.MidlineLeft;
             Button watchAd = CreateButton(rewardedRow.rectTransform, "WATCH AD", new Vector2(235, 0),
                 new Vector2(245, 78), Cyan, 24);
@@ -547,9 +761,10 @@ namespace WordSortPuzzle
 
             Image noAdsRow = AddImage("Remove Ads", card.rectTransform, null, BackgroundLight);
             SetRect(noAdsRow.rectTransform, new Vector2(0, -270), new Vector2(760, 130));
+            AddRowIcon(noAdsRow.rectTransform, privacyIcon);
             TextMeshProUGUI noAdsLabel = AddText("Label", noAdsRow.rectTransform, "REMOVE ADS\nPERMANENT",
                 29, FontStyles.Bold);
-            SetRect(noAdsLabel.rectTransform, new Vector2(-170, 0), new Vector2(390, 100));
+            SetRect(noAdsLabel.rectTransform, new Vector2(-90, 0), new Vector2(310, 100));
             noAdsLabel.alignment = TextAlignmentOptions.MidlineLeft;
             Button noAds = CreateButton(noAdsRow.rectTransform, "BUY", new Vector2(235, 0),
                 new Vector2(245, 78), Purple, 24);
@@ -558,9 +773,10 @@ namespace WordSortPuzzle
 
             Image undoRow = AddImage("Undo Pack", card.rectTransform, null, BackgroundLight);
             SetRect(undoRow.rectTransform, new Vector2(0, -415), new Vector2(760, 130));
+            AddRowIcon(undoRow.rectTransform, undoIcon);
             TextMeshProUGUI undoLabel = AddText("Label", undoRow.rectTransform, $"UNDO PACK\n+{UndoPackAmount} UNDO",
                 31, FontStyles.Bold);
-            SetRect(undoLabel.rectTransform, new Vector2(-170, 0), new Vector2(390, 105));
+            SetRect(undoLabel.rectTransform, new Vector2(-90, 0), new Vector2(310, 105));
             undoLabel.alignment = TextAlignmentOptions.MidlineLeft;
             Button buyUndo = CreateButton(undoRow.rectTransform, $"{UndoPackCost} COINS", new Vector2(235, 0),
                 new Vector2(245, 82), Gold, 25);
@@ -658,7 +874,8 @@ namespace WordSortPuzzle
             Image blocker = AddImage("Privacy Overlay", gameRoot, null, new Color32(9, 7, 29, 248));
             Stretch(blocker.rectTransform);
             privacyPanel = blocker.gameObject.AddComponent<CanvasGroup>();
-            Image card = AddImage("Card", blocker.rectTransform, null, Panel);
+            Image card = AddImage("Card", blocker.rectTransform, roundedButtonSprite, Panel);
+            card.type = Image.Type.Sliced;
             SetRect(card.rectTransform, Vector2.zero, new Vector2(900, 1180));
 
             TextMeshProUGUI title = AddText("Title", card.rectTransform, "YOUR PRIVACY", 61, FontStyles.Bold);
@@ -714,9 +931,10 @@ namespace WordSortPuzzle
         {
             Image row = AddImage(title, parent, null, BackgroundLight);
             SetRect(row.rectTransform, new Vector2(0, y), new Vector2(760, 140));
+            AddRowIcon(row.rectTransform, coinIcon);
             TextMeshProUGUI label = AddText("Label", row.rectTransform, $"{title}\n+{amount} COINS", 31,
                 FontStyles.Bold);
-            SetRect(label.rectTransform, new Vector2(-170, 0), new Vector2(390, 105));
+            SetRect(label.rectTransform, new Vector2(-90, 0), new Vector2(310, 105));
             label.alignment = TextAlignmentOptions.MidlineLeft;
             Button buy = CreateButton(row.rectTransform, "BUY", new Vector2(235, 0), new Vector2(245, 82), color,
                 25);
@@ -724,26 +942,43 @@ namespace WordSortPuzzle
             return buy.GetComponentInChildren<TextMeshProUGUI>();
         }
 
+        private void AddRowIcon(Transform parent, Sprite sprite)
+        {
+            if (sprite == null) return;
+            Image icon = AddImage("Icon", parent, sprite, Color.white);
+            SetRect(icon.rectTransform, new Vector2(-310, 0), new Vector2(88, 88));
+            icon.preserveAspect = true;
+            icon.raycastTarget = false;
+        }
+
         private void BuildWinPanel()
         {
             Image blocker = AddImage("Win Overlay", gameRoot, null, new Color32(9, 7, 29, 232));
             Stretch(blocker.rectTransform);
             winPanel = blocker.gameObject.AddComponent<CanvasGroup>();
-            Image card = AddImage("Card", blocker.rectTransform, null, Panel);
-            SetRect(card.rectTransform, Vector2.zero, new Vector2(870, 880));
-            TextMeshProUGUI star = AddText("Star", card.rectTransform, "WIN", 72, FontStyles.Bold);
-            SetRect(star.rectTransform, new Vector2(0, 290), new Vector2(300, 150));
-            star.color = Gold;
+            Image card = AddImage("Card", blocker.rectTransform, roundedButtonSprite, Panel);
+            card.type = Image.Type.Sliced;
+            SetRect(card.rectTransform, Vector2.zero, new Vector2(870, 990));
+            if (trophyIcon != null)
+            {
+                Image trophy = AddImage("Trophy", card.rectTransform, trophyIcon, Color.white);
+                SetRect(trophy.rectTransform, new Vector2(0, 350), new Vector2(190, 190));
+                trophy.preserveAspect = true;
+                trophy.raycastTarget = false;
+            }
             winTitleText = AddText("Title", card.rectTransform, "LEVEL COMPLETE!", 62, FontStyles.Bold);
-            SetRect(winTitleText.rectTransform, new Vector2(0, 145), new Vector2(760, 95));
+            SetRect(winTitleText.rectTransform, new Vector2(0, 215), new Vector2(760, 95));
             winStatsText = AddText("Stats", card.rectTransform, "", 31, FontStyles.Normal);
-            SetRect(winStatsText.rectTransform, new Vector2(0, 15), new Vector2(720, 145));
+            SetRect(winStatsText.rectTransform, new Vector2(0, 35), new Vector2(760, 240));
             winStatsText.color = Muted;
-            Button next = CreateButton(card.rectTransform, "NEXT LEVEL", new Vector2(0, -155), new Vector2(560, 120),
+            winStatsText.enableAutoSizing = true;
+            winStatsText.fontSizeMin = 23f;
+            winStatsText.fontSizeMax = 31f;
+            Button next = CreateButton(card.rectTransform, "NEXT LEVEL", new Vector2(0, -205), new Vector2(560, 120),
                 Purple, 42);
             nextButtonText = next.GetComponentInChildren<TextMeshProUGUI>();
             next.onClick.AddListener(NextLevel);
-            Button levels = CreateButton(card.rectTransform, "LEVEL SELECT", new Vector2(0, -305),
+            Button levels = CreateButton(card.rectTransform, "LEVEL SELECT", new Vector2(0, -355),
                 new Vector2(560, 100), PanelLight, 34);
             levels.onClick.AddListener(ShowLevelSelect);
             HidePanelInstant(winPanel);
@@ -758,12 +993,75 @@ namespace WordSortPuzzle
             backgroundScreen.gameObject.SetActive(false);
             HidePanelInstant(winPanel);
             HidePanelInstant(settingsPanel);
+            HidePanelInstant(resetProgressPanel);
             HidePanelInstant(shopPanel);
             int completed = Enumerable.Range(0, WordLevelCatalog.TotalLevels).Count(GameProgress.IsCompleted);
             mainProgressText.text = $"CURRENT LEVEL: {GameProgress.CurrentLevel + 1}   •   COMPLETED: {completed}/200";
             RefreshCoinText();
             ApplyAudioSettings();
             monetization?.SetBannerVisible(true);
+            StartMainMenuAnimations();
+        }
+
+        private void StartMainMenuAnimations()
+        {
+            if (mainLogoRect != null)
+            {
+                mainLogoRect.DOKill();
+                mainLogoRect.anchoredPosition = mainLogoBasePosition;
+                mainLogoRect.localScale = Vector3.one;
+                mainLogoRect.localRotation = Quaternion.identity;
+                mainLogoRect.DOAnchorPosY(mainLogoBasePosition.y + 12f, 2.25f)
+                    .SetEase(Ease.InOutSine).SetLoops(-1, LoopType.Yoyo).SetUpdate(true);
+                mainLogoRect.DORotate(new Vector3(0, 0, 1.25f), 3.1f)
+                    .SetEase(Ease.InOutSine).SetLoops(-1, LoopType.Yoyo).SetUpdate(true);
+            }
+
+            for (int i = 0; i < mainAmbientElements.Count; i++)
+            {
+                RectTransform rect = mainAmbientElements[i];
+                if (rect == null) continue;
+                rect.DOKill();
+                Image image = rect.GetComponent<Image>();
+                Vector2 start = rect.anchoredPosition;
+                Color startColor = image.color;
+                bool isWisp = rect.sizeDelta.x > rect.sizeDelta.y * 3f;
+                Vector2 travel = isWisp
+                    ? new Vector2(i % 2 == 0 ? 115f : -115f, 18f)
+                    : new Vector2(i % 2 == 0 ? 12f : -12f, 75f + i % 3 * 18f);
+                float duration = isWisp ? 3.4f + i * 0.12f : 2.8f + i * 0.18f;
+
+                Sequence drift = DOTween.Sequence().SetTarget(rect).SetUpdate(true);
+                drift.AppendInterval(i * 0.17f);
+                drift.Append(rect.DOAnchorPos(start + travel, duration).SetEase(Ease.InOutSine));
+                drift.Join(image.DOFade(0.015f, duration));
+                drift.AppendCallback(() =>
+                {
+                    rect.anchoredPosition = start;
+                    image.color = startColor;
+                });
+                drift.SetLoops(-1, LoopType.Restart);
+            }
+
+            for (int i = 0; i < mainMenuButtons.Count; i++)
+            {
+                RectTransform rect = mainMenuButtons[i].GetComponent<RectTransform>();
+                if (rect == null) continue;
+                rect.DOKill();
+                rect.localScale = Vector3.one;
+                rect.DOScale(1.018f, 1.7f + i * 0.12f)
+                    .SetEase(Ease.InOutSine).SetLoops(-1, LoopType.Yoyo).SetUpdate(true);
+            }
+        }
+
+        private void StopMainMenuAnimations()
+        {
+            if (mainLogoRect != null) mainLogoRect.DOKill();
+            foreach (RectTransform rect in mainAmbientElements)
+                if (rect != null) rect.DOKill();
+            foreach (Button button in mainMenuButtons)
+                if (button != null)
+                    button.transform.DOKill();
         }
 
         private void ShowLevelSelect()
@@ -775,6 +1073,7 @@ namespace WordSortPuzzle
             backgroundScreen.gameObject.SetActive(false);
             HidePanelInstant(winPanel);
             HidePanelInstant(settingsPanel);
+            HidePanelInstant(resetProgressPanel);
             HidePanelInstant(shopPanel);
             RefreshLevelButtons();
             RefreshCoinText();
@@ -790,6 +1089,7 @@ namespace WordSortPuzzle
             backgroundScreen.gameObject.SetActive(true);
             HidePanelInstant(winPanel);
             HidePanelInstant(settingsPanel);
+            HidePanelInstant(resetProgressPanel);
             HidePanelInstant(shopPanel);
             RefreshBackgroundCards();
             RefreshCoinText();
@@ -885,10 +1185,15 @@ namespace WordSortPuzzle
             hasWon = false;
             moves = 0;
             completionReward = 0;
+            completionUndoReward = 0;
+            levelElapsedSeconds = 0f;
+            lastDisplayedTimerSecond = -1;
+            levelTimerRunning = true;
             levelTitleText.text = $"LEVEL {level.Number}";
             helperText.text = "SELECT A TOP LETTER";
             helperText.color = Muted;
             UpdateMoveText();
+            RefreshTimerText();
             RefreshUndoText();
             BuildTargets();
 
@@ -1256,9 +1561,17 @@ namespace WordSortPuzzle
         private void ResetLevel()
         {
             if (isAnimating) return;
+            bool meaningfulReset = moves > 0;
             if (selectedTube != null) DeselectTube();
             boardContent.DOPunchScale(Vector3.one * 0.018f, 0.25f, 5, 0.5f).SetTarget(gameRoot)
-                .OnComplete(() => BuildCurrentLevelBoard(CloneStacks(initialStacks)));
+                .OnComplete(() =>
+                {
+                    void Reload() => BuildCurrentLevelBoard(CloneStacks(initialStacks));
+                    if (meaningfulReset && monetization != null)
+                        monetization.ShowInterstitialAfterLevelReset(Reload);
+                    else
+                        Reload();
+                });
         }
 
         private void EvaluateCompletedTubes(bool animate)
@@ -1289,6 +1602,7 @@ namespace WordSortPuzzle
                     if (animate && !wasLocked)
                     {
                         tube.PlayCompleted();
+                        ShowWordCompleteCelebration(word);
                         for (int tileIndex = 0; tileIndex < tube.Tiles.Count; tileIndex++)
                             tube.Tiles[tileIndex].Rect.DOPunchScale(Vector3.one * 0.12f, 0.45f, 5, 0.55f)
                                 .SetDelay(tileIndex * 0.055f).SetTarget(gameRoot);
@@ -1301,11 +1615,17 @@ namespace WordSortPuzzle
             if (completed == level.WordCount && !hasWon)
             {
                 hasWon = true;
+                levelTimerRunning = false;
                 bool firstCompletion = !GameProgress.IsCompleted(currentLevelIndex);
-                GameProgress.CompleteLevel(currentLevelIndex, moves);
+                GameProgress.CompleteLevel(currentLevelIndex, moves, levelElapsedSeconds);
                 completionReward = firstCompletion ? FirstCompletionReward : 0;
                 if (completionReward > 0) GameProgress.AddCoins(completionReward);
+                completionUndoReward = GameProgress.UndoTokens < LowUndoReserveThreshold
+                    ? LowUndoCompletionGrant
+                    : 0;
+                if (completionUndoReward > 0) GameProgress.AddUndoTokens(completionUndoReward);
                 RefreshCoinText();
+                RefreshUndoText();
                 PlaySuccess();
                 VibrateIfEnabled();
                 DOVirtual.DelayedCall(0.7f, ShowWinPanel).SetTarget(gameRoot);
@@ -1318,9 +1638,11 @@ namespace WordSortPuzzle
                 ? "YOU COMPLETED THE GAME!"
                 : "LEVEL COMPLETE!";
             int best = GameProgress.BestMoves(currentLevelIndex);
-            winStatsText.text = completionReward > 0
-                ? $"MOVES: {moves}\nBEST: {best}\n+{completionReward} COINS"
-                : $"MOVES: {moves}\nBEST: {best}";
+            float bestTime = GameProgress.BestTimeSeconds(currentLevelIndex);
+            string rewards = completionReward > 0 ? $"\n+{completionReward} COINS" : string.Empty;
+            if (completionUndoReward > 0) rewards += $"\n+{completionUndoReward} EXTRA UNDO";
+            winStatsText.text = $"TIME: {FormatTime(levelElapsedSeconds)}   •   BEST: {FormatTime(bestTime)}\n" +
+                                $"MOVES: {moves}   •   BEST: {best}{rewards}";
             nextButtonText.text = currentLevelIndex == WordLevelCatalog.TotalLevels - 1 ? "MAIN MENU" : "NEXT LEVEL";
             ShowPanel(winPanel);
         }
@@ -1383,7 +1705,69 @@ namespace WordSortPuzzle
             helperText.color = Muted;
         }
 
-        private void UpdateMoveText() => moveText.text = "MOVES: " + moves;
+        private void UpdateMoveText() => moveText.text = "MOVES  " + moves;
+
+        private void RefreshTimerText()
+        {
+            if (timerText != null) timerText.text = FormatTime(levelElapsedSeconds);
+        }
+
+        private static string FormatTime(float seconds)
+        {
+            int totalSeconds = Mathf.Max(0, Mathf.FloorToInt(seconds));
+            int hours = totalSeconds / 3600;
+            int minutes = totalSeconds / 60 % 60;
+            int remainingSeconds = totalSeconds % 60;
+            return hours > 0
+                ? $"{hours}:{minutes:00}:{remainingSeconds:00}"
+                : $"{minutes:00}:{remainingSeconds:00}";
+        }
+
+        private void ShowWordCompleteCelebration(string word)
+        {
+            if (wordCompleteToast == null || wordCompleteToastCard == null) return;
+            wordCompleteToast.DOKill();
+            wordCompleteToastCard.DOKill();
+            wordCompleteToastText.text = word;
+            wordCompleteToast.gameObject.SetActive(true);
+            wordCompleteToast.transform.SetAsLastSibling();
+            wordCompleteToast.alpha = 0f;
+            wordCompleteToastCard.localScale = Vector3.one * 0.78f;
+            wordCompleteToastCard.anchoredPosition = new Vector2(0, 430);
+
+            Sequence sequence = DOTween.Sequence().SetTarget(gameRoot);
+            sequence.Append(wordCompleteToast.DOFade(1f, 0.16f));
+            sequence.Join(wordCompleteToastCard.DOScale(1f, 0.3f).SetEase(Ease.OutBack));
+            sequence.Join(wordCompleteToastCard.DOAnchorPosY(470f, 0.28f).SetEase(Ease.OutQuad));
+            sequence.AppendInterval(0.62f);
+            sequence.Append(wordCompleteToast.DOFade(0f, 0.22f));
+            sequence.Join(wordCompleteToastCard.DOScale(0.92f, 0.22f).SetEase(Ease.InQuad));
+            sequence.OnComplete(() => wordCompleteToast.gameObject.SetActive(false));
+
+            Color[] sparkleColors = { Cyan, Gold, Green, Blue, Purple };
+            for (int i = 0; i < 12; i++)
+            {
+                float angle = i * 30f * Mathf.Deg2Rad;
+                Vector2 direction = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+                Image sparkle = AddImage("Word Sparkle", playScreen, roundedButtonSprite,
+                    sparkleColors[i % sparkleColors.Length]);
+                sparkle.type = Image.Type.Sliced;
+                float size = 14f + i % 3 * 5f;
+                SetRect(sparkle.rectTransform, new Vector2(0, 470), new Vector2(size, size));
+                sparkle.raycastTarget = false;
+                sparkle.transform.SetAsLastSibling();
+                sparkle.rectTransform.DOAnchorPos(new Vector2(0, 470) + direction * (190f + i % 4 * 28f),
+                        0.72f)
+                    .SetEase(Ease.OutCubic).SetTarget(gameRoot);
+                sparkle.rectTransform.DORotate(new Vector3(0, 0, 150f + i * 17f), 0.72f,
+                    RotateMode.FastBeyond360).SetTarget(gameRoot);
+                sparkle.DOFade(0f, 0.72f).SetEase(Ease.InQuad).SetTarget(gameRoot)
+                    .OnKill(() =>
+                    {
+                        if (sparkle != null) Destroy(sparkle.gameObject);
+                    });
+            }
+        }
 
         private List<List<char>> GenerateScrambledStacks(WordLevelDefinition definition)
         {
@@ -1437,8 +1821,8 @@ namespace WordSortPuzzle
                 bool complete = GameProgress.IsCompleted(view.LevelIndex);
                 view.Button.interactable = unlocked;
                 view.Image.color = complete ? Green : unlocked ? Purple : new Color32(55, 49, 80, 255);
-                view.Label.text = complete ? $"{view.LevelIndex + 1}\nDONE" :
-                    unlocked ? (view.LevelIndex + 1).ToString() : "LOCKED";
+                view.Label.text = complete ? $"DONE\n{view.LevelIndex + 1}" :
+                    unlocked ? (view.LevelIndex + 1).ToString() : "—";
                 view.Label.color = unlocked ? Color.white : new Color32(130, 125, 153, 255);
             }
         }
@@ -1450,6 +1834,26 @@ namespace WordSortPuzzle
         }
 
         private void HideSettings() => HidePanel(settingsPanel);
+
+        private void ShowResetProgressConfirmation()
+        {
+            resetProgressPanel.transform.SetAsLastSibling();
+            ShowPanel(resetProgressPanel);
+        }
+
+        private void ConfirmResetProgress()
+        {
+            GameProgress.ResetLevelProgress();
+            currentLevelIndex = 0;
+            freeUndosRemaining = 0;
+            undoStack.Clear();
+            hiddenWordIndices.Clear();
+            HidePanelInstant(resetProgressPanel);
+            ApplySelectedBackground();
+            RefreshLevelButtons();
+            RefreshBackgroundCards();
+            ShowMainMenu();
+        }
 
         private void ShowShop()
         {
@@ -1542,13 +1946,23 @@ namespace WordSortPuzzle
         {
             foreach (TextMeshProUGUI text in coinTexts)
                 if (text != null)
-                    text.text = $"COINS  {GameProgress.Coins}";
+                    text.text = $"<size=19><color=#FFF0AE>COINS</color></size>  <size=29>{GameProgress.Coins}</size>";
         }
 
         private void RefreshUndoText()
         {
-            int total = freeUndosRemaining + GameProgress.UndoTokens;
-            if (undoButtonText != null) undoButtonText.text = total.ToString();
+            // The button shows this level's allowance instead of adding the
+            // persistent reserve to it. Once the free allowance is exhausted,
+            // make the switch to reserve tokens explicit rather than making the
+            // count appear to increase between levels.
+            if (undoButtonText != null)
+            {
+                undoButtonText.text = freeUndosRemaining > 0
+                    ? freeUndosRemaining.ToString()
+                    : GameProgress.UndoTokens > 0
+                        ? $"+{GameProgress.UndoTokens}"
+                        : "0";
+            }
             if (shopUndoText != null) shopUndoText.text = $"EXTRA UNDO  {GameProgress.UndoTokens}";
         }
 
@@ -1723,22 +2137,35 @@ namespace WordSortPuzzle
             label.fontSizeMin = 22;
             label.fontSizeMax = 39;
             label.raycastTarget = false;
+            Outline outline = image.gameObject.AddComponent<Outline>();
+            outline.effectColor = new Color32(103, 72, 188, 210);
+            outline.effectDistance = new Vector2(3f, -3f);
+            outline.useGraphicAlpha = true;
             Button button = image.gameObject.AddComponent<Button>();
             button.targetGraphic = image;
             button.transition = Selectable.Transition.None;
             button.onClick.AddListener(PlayClick);
             button.onClick.AddListener(() => TryRevealWord(wordIndex));
-            return new TargetChip(image, label, color, word, hidden, revealCost, button);
+            return new TargetChip(image, label, outline, color, word, hidden, revealCost, button);
         }
 
         private TextMeshProUGUI CreateSettingRow(Transform parent, string title, float y,
             UnityEngine.Events.UnityAction action)
         {
-            Image row = AddImage(title, parent, null, BackgroundLight);
+            Image row = AddImage(title, parent, roundedButtonSprite, BackgroundLight);
+            row.type = Image.Type.Sliced;
             SetRect(row.rectTransform, new Vector2(0, y), new Vector2(690, 105));
+            Sprite settingIcon = GetSettingIcon(title);
+            if (settingIcon != null)
+            {
+                Image icon = AddImage("Icon", row.rectTransform, settingIcon, Color.white);
+                SetRect(icon.rectTransform, new Vector2(-285, 0), new Vector2(78, 78));
+                icon.preserveAspect = true;
+                icon.raycastTarget = false;
+            }
             TextMeshProUGUI label = AddText("Label", row.rectTransform, title,
                 title.Length > 12 ? 28 : 34, FontStyles.Bold);
-            SetRect(label.rectTransform, new Vector2(-165, 0), new Vector2(330, 70));
+            SetRect(label.rectTransform, new Vector2(-75, 0), new Vector2(320, 70));
             label.alignment = TextAlignmentOptions.MidlineLeft;
             Button toggle = CreateButton(row.rectTransform, "ON", new Vector2(235, 0), new Vector2(170, 72), Purple,
                 30);
@@ -1757,6 +2184,9 @@ namespace WordSortPuzzle
             image.sprite = roundedButtonSprite;
             image.type = Image.Type.Sliced;
             image.color = Purple;
+            Outline outline = go.AddComponent<Outline>();
+            outline.effectColor = new Color(0.05f, 0.02f, 0.18f, 0.62f);
+            outline.effectDistance = new Vector2(2f, -4f);
             Button button = go.GetComponent<Button>();
             button.targetGraphic = image;
             button.onClick.AddListener(PlayClick);
@@ -1772,6 +2202,10 @@ namespace WordSortPuzzle
             Image image = AddImage(label + " Button", parent, roundedButtonSprite, color);
             image.type = Image.Type.Sliced;
             SetRect(image.rectTransform, position, size);
+            Outline outline = image.gameObject.AddComponent<Outline>();
+            outline.effectColor = new Color(0.08f, 0.04f, 0.22f, 0.55f);
+            outline.effectDistance = new Vector2(2f, -4f);
+            outline.useGraphicAlpha = true;
             Button button = image.gameObject.AddComponent<Button>();
             button.targetGraphic = image;
             ColorBlock colors = button.colors;
@@ -1787,11 +2221,12 @@ namespace WordSortPuzzle
             if (iconSprite != null)
             {
                 bool showUndoCount = label == "UNDO";
-                float iconSize = Mathf.Clamp(size.y * 0.62f, 34f, 64f);
+                bool compactSquare = Mathf.Abs(size.x - size.y) < 18f;
+                float iconSize = Mathf.Clamp(size.y * (compactSquare ? 0.74f : 0.68f), 38f, 88f);
                 Image icon = AddImage("Icon", image.rectTransform, iconSprite, Color.white);
-                bool compactSquare = showUndoCount && Mathf.Abs(size.x - size.y) < 2f;
                 SetRect(icon.rectTransform,
-                    compactSquare ? new Vector2(0f, 13f) : new Vector2(showUndoCount ? -42f : 0f, 1f),
+                    compactSquare ? new Vector2(0f, showUndoCount ? 13f : 0f) :
+                        new Vector2(-size.x * 0.5f + iconSize * 0.72f + 18f, 0f),
                     new Vector2(iconSize, iconSize));
                 icon.preserveAspect = true;
                 icon.raycastTarget = false;
@@ -1802,9 +2237,18 @@ namespace WordSortPuzzle
                         compactSquare ? new Vector2(80f, 28f) : new Vector2(90f, size.y - 12f));
                     text.fontSize = compactSquare ? 21f : Mathf.Min(fontSize, 30f);
                 }
-                else
+                else if (compactSquare)
                 {
                     text.gameObject.SetActive(false);
+                }
+                else
+                {
+                    // Reserve a clear gutter between the icon glow and the label on narrow mobile buttons.
+                    SetRect(text.rectTransform, new Vector2(iconSize * 0.65f, 0f),
+                        new Vector2(size.x - iconSize - 82f, size.y - 12f));
+                    text.enableAutoSizing = true;
+                    text.fontSizeMin = Mathf.Max(17f, fontSize * 0.62f);
+                    text.fontSizeMax = fontSize;
                 }
             }
             else
@@ -1818,21 +2262,57 @@ namespace WordSortPuzzle
 
         private Sprite GetControlIcon(string label)
         {
-            if (label == "SET") return settingsIcon;
+            if (label == "PLAY" || label == "NEXT LEVEL" || label == "WATCH AD") return playIcon;
+            if (label == "LEVELS" || label == "LEVEL SELECT") return levelsIcon;
+            if (label == "SHOP") return coinIcon;
+            if (label == "BACKGROUNDS" || label == "USE") return backgroundsIcon;
+            if (label == "SET" || label == "SETTINGS") return settingsIcon;
             if (label == "‹") return backIcon;
             if (label == "UNDO") return undoIcon;
-            if (label == "RESET") return resetIcon;
+            if (label == "RESET" || label == "RESET PROGRESS" || label == "RESTORE PURCHASES") return resetIcon;
+            if (label == "PRIVACY CHOICES" || label == "READ PRIVACY POLICY" ||
+                label == "ALLOW PERSONALIZED ADS" || label == "USE NON-PERSONALIZED ADS") return privacyIcon;
+            if (label == "MAIN MENU") return homeIcon;
+            if (label == "BUY" || label.EndsWith(" COINS")) return coinIcon;
+            return null;
+        }
+
+        private Sprite GetSettingIcon(string title)
+        {
+            if (title == "SOUND") return soundIcon;
+            if (title == "BACKGROUND MUSIC") return musicIcon;
+            if (title == "VIBRATION") return vibrationIcon;
             return null;
         }
 
         private void CreateCoinBadge(Transform parent, Vector2 position, bool opensShop)
         {
-            Image badge = AddImage("Coin Balance", parent, roundedButtonSprite, new Color32(173, 112, 21, 255));
+            Image badge = AddImage("Coin Balance", parent, roundedButtonSprite, new Color32(223, 139, 20, 255));
             badge.type = Image.Type.Sliced;
-            SetRect(badge.rectTransform, position, new Vector2(235, 78));
+            SetRect(badge.rectTransform, position, new Vector2(250, 84));
+            Outline outline = badge.gameObject.AddComponent<Outline>();
+            outline.effectColor = new Color32(86, 39, 8, 185);
+            outline.effectDistance = new Vector2(2f, -4f);
+            outline.useGraphicAlpha = true;
+
+            Image shine = AddImage("Soft Highlight", badge.rectTransform, roundedButtonSprite,
+                new Color32(255, 239, 158, 48));
+            shine.type = Image.Type.Sliced;
+            SetRect(shine.rectTransform, new Vector2(0, 17), new Vector2(222, 27));
+            shine.raycastTarget = false;
+            if (coinIcon != null)
+            {
+                Image icon = AddImage("Coin", badge.rectTransform, coinIcon, Color.white);
+                SetRect(icon.rectTransform, new Vector2(-86, 0), new Vector2(68, 68));
+                icon.preserveAspect = true;
+                icon.raycastTarget = false;
+            }
             TextMeshProUGUI text = AddText("Text", badge.rectTransform, string.Empty, 27, FontStyles.Bold);
-            Stretch(text.rectTransform, new Vector2(10, 5), new Vector2(-10, -5));
+            SetRect(text.rectTransform, new Vector2(30, 0), new Vector2(155, 68));
             text.color = Color.white;
+            text.enableAutoSizing = true;
+            text.fontSizeMin = 19f;
+            text.fontSizeMax = 29f;
             text.raycastTarget = false;
             coinTexts.Add(text);
             if (opensShop)
@@ -1883,9 +2363,12 @@ namespace WordSortPuzzle
 
         private void StopGameplayTweens()
         {
+            StopMainMenuAnimations();
             if (gameRoot != null) DOTween.Kill(gameRoot, false);
             isAnimating = false;
+            levelTimerRunning = false;
             selectedTube = null;
+            if (wordCompleteToast != null) HidePanelInstant(wordCompleteToast);
         }
 
         private static RectTransform CreateRect(string name, Transform parent)
@@ -2119,6 +2602,7 @@ namespace WordSortPuzzle
         {
             private readonly Image image;
             private readonly TextMeshProUGUI label;
+            private readonly Outline outline;
             private readonly Color normalColor;
             private readonly string word;
             private readonly int revealCost;
@@ -2127,11 +2611,12 @@ namespace WordSortPuzzle
 
             public bool IsHidden => hidden;
 
-            public TargetChip(Image image, TextMeshProUGUI label, Color normalColor, string word, bool hidden,
-                int revealCost, Button button)
+            public TargetChip(Image image, TextMeshProUGUI label, Outline outline, Color normalColor, string word,
+                bool hidden, int revealCost, Button button)
             {
                 this.image = image;
                 this.label = label;
+                this.outline = outline;
                 this.normalColor = normalColor;
                 this.word = word;
                 this.hidden = hidden;
@@ -2150,15 +2635,23 @@ namespace WordSortPuzzle
             public void SetCompleted(bool completed, bool animate)
             {
                 image.DOKill();
-                image.color = completed ? Gold : normalColor;
+                image.color = completed ? Green : normalColor;
+                outline.effectColor = completed ? new Color32(255, 211, 74, 245) :
+                    new Color32(103, 72, 188, 210);
+                outline.effectDistance = completed ? new Vector2(5f, -5f) : new Vector2(3f, -3f);
                 Refresh(completed);
-                if (completed && animate) image.rectTransform.DOPunchScale(Vector3.one * 0.08f, 0.42f, 5, 0.55f);
+                if (completed && animate)
+                {
+                    Sequence sequence = DOTween.Sequence();
+                    sequence.Append(image.rectTransform.DOScale(1.09f, 0.16f).SetEase(Ease.OutBack));
+                    sequence.Append(image.rectTransform.DOScale(1f, 0.24f).SetEase(Ease.OutQuad));
+                }
             }
 
             private void Refresh(bool completed)
             {
-                label.text = completed ? "OK  " + word : hidden ? $"???\n{revealCost} COINS" : word;
-                image.color = completed ? Gold : hidden ? Color.Lerp(normalColor, Background, 0.48f) : normalColor;
+                label.text = completed ? "DONE  " + word : hidden ? $"?  ?  ?\n{revealCost} COINS" : word;
+                image.color = completed ? Green : hidden ? Color.Lerp(normalColor, Background, 0.48f) : normalColor;
                 button.interactable = hidden && !completed;
             }
         }

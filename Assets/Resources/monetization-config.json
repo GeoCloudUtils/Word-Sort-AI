@@ -13,5 +13,8 @@
   "mediumCoins": 500,
   "largeCoins": 1200,
   "rewardedCoins": 75,
-  "interstitialEveryCompletedLevels": 1
+  "interstitialEveryCompletedLevels": 1,
+  "interstitialEveryLevelResets": 3,
+  "interstitialMinimumSecondsBetweenAds": 90.0,
+  "interstitialSessionGraceSeconds": 45.0
 }

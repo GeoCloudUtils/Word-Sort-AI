@@ -33,6 +33,9 @@ namespace WordSortPuzzle
             public int largeCoins = 1200;
             public int rewardedCoins = 75;
             public int interstitialEveryCompletedLevels = 1;
+            public int interstitialEveryLevelResets = 3;
+            public float interstitialMinimumSecondsBetweenAds = 90f;
+            public float interstitialSessionGraceSeconds = 45f;
         }
 
         private const string ConfigResource = "monetization-config";
@@ -54,6 +57,9 @@ namespace WordSortPuzzle
         private bool purchasingSettled;
         private bool adsSettled;
         private int completedLevelsSinceInterstitial;
+        private int levelResetsSinceInterstitial;
+        private float sessionStartedAt;
+        private float lastInterstitialShownAt = float.NegativeInfinity;
 
         public Configuration Config { get; private set; }
         public bool HasConsentChoice => PlayerPrefs.HasKey(ConsentChoiceKey);
@@ -82,6 +88,7 @@ namespace WordSortPuzzle
 
         private void Awake()
         {
+            sessionStartedAt = Time.realtimeSinceStartup;
             TextAsset asset = Resources.Load<TextAsset>(ConfigResource);
             Config = asset == null ? new Configuration() : JsonUtility.FromJson<Configuration>(asset.text);
             if (Config == null) Config = new Configuration();
@@ -188,18 +195,56 @@ namespace WordSortPuzzle
             onComplete?.Invoke();
             return;
 #else
-            if (AdsRemoved || interstitialAd == null || !interstitialAd.IsAdReady() ||
-                completedLevelsSinceInterstitial < interval)
+            if (completedLevelsSinceInterstitial < interval || !CanShowInterstitial())
             {
                 onComplete?.Invoke();
                 return;
             }
 
-            completedLevelsSinceInterstitial = 0;
-            pendingInterstitialCompletion = onComplete;
-            interstitialAd.ShowAd("level_complete");
+            ShowInterstitial("level_complete", onComplete);
 #endif
         }
+
+        public void ShowInterstitialAfterLevelReset(Action onComplete)
+        {
+            levelResetsSinceInterstitial++;
+            int interval = Mathf.Max(2, Config.interstitialEveryLevelResets);
+#if UNITY_WEBGL
+            onComplete?.Invoke();
+            return;
+#else
+            if (levelResetsSinceInterstitial < interval || !CanShowInterstitial())
+            {
+                onComplete?.Invoke();
+                return;
+            }
+
+            ShowInterstitial("repeated_level_reset", onComplete);
+#endif
+        }
+
+#if !UNITY_WEBGL
+        private bool CanShowInterstitial()
+        {
+            if (AdsRemoved || pendingInterstitialCompletion != null || interstitialAd == null ||
+                !interstitialAd.IsAdReady())
+                return false;
+
+            float now = Time.realtimeSinceStartup;
+            float grace = Mathf.Max(0f, Config.interstitialSessionGraceSeconds);
+            float cooldown = Mathf.Max(0f, Config.interstitialMinimumSecondsBetweenAds);
+            return now - sessionStartedAt >= grace && now - lastInterstitialShownAt >= cooldown;
+        }
+
+        private void ShowInterstitial(string placement, Action onComplete)
+        {
+            completedLevelsSinceInterstitial = 0;
+            levelResetsSinceInterstitial = 0;
+            lastInterstitialShownAt = Time.realtimeSinceStartup;
+            pendingInterstitialCompletion = onComplete;
+            interstitialAd.ShowAd(placement);
+        }
+#endif
 
         public void SetBannerVisible(bool visible)
         {

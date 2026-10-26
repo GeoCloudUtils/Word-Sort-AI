@@ -150,7 +150,7 @@ namespace WordSortPuzzle
             return PlayerPrefs.GetInt(BestMovesKey(levelIndex), 0);
         }
 
-        public static void CompleteLevel(int levelIndex, int moves)
+        public static void CompleteLevel(int levelIndex, int moves, float elapsedSeconds)
         {
             string key = BestMovesKey(levelIndex);
             int previous = PlayerPrefs.GetInt(key, 0);
@@ -158,6 +158,12 @@ namespace WordSortPuzzle
             {
                 PlayerPrefs.SetInt(key, Mathf.Max(1, moves));
             }
+
+            int elapsedMilliseconds = Mathf.Max(1, Mathf.RoundToInt(elapsedSeconds * 1000f));
+            string timeKey = BestTimeKey(levelIndex);
+            int previousTime = PlayerPrefs.GetInt(timeKey, 0);
+            if (previousTime == 0 || elapsedMilliseconds < previousTime)
+                PlayerPrefs.SetInt(timeKey, elapsedMilliseconds);
 
             if (levelIndex < WordLevelCatalog.TotalLevels - 1)
             {
@@ -167,7 +173,34 @@ namespace WordSortPuzzle
             PlayerPrefs.Save();
         }
 
+        public static void ResetLevelProgress()
+        {
+            PlayerPrefs.DeleteKey(HighestLevelKey);
+            PlayerPrefs.DeleteKey(CurrentLevelKey);
+            PlayerPrefs.DeleteKey(SelectedBackgroundKey);
+
+            for (int levelIndex = 0; levelIndex < WordLevelCatalog.TotalLevels; levelIndex++)
+            {
+                PlayerPrefs.DeleteKey(BestMovesKey(levelIndex));
+                PlayerPrefs.DeleteKey(BestTimeKey(levelIndex));
+                PlayerPrefs.DeleteKey(BonusTubeKey(levelIndex));
+
+                // A level contains at most five target words. Delete every
+                // possible reveal key so future catalog changes cannot leave
+                // stale reveal progress behind.
+                for (int wordIndex = 0; wordIndex < 5; wordIndex++)
+                    PlayerPrefs.DeleteKey(RevealedWordKey(levelIndex, wordIndex));
+            }
+
+            PlayerPrefs.Save();
+        }
+
         private static string BestMovesKey(int levelIndex) => "word_sort.best." + levelIndex;
+
+        public static float BestTimeSeconds(int levelIndex) =>
+            Mathf.Max(0, PlayerPrefs.GetInt(BestTimeKey(levelIndex), 0)) / 1000f;
+
+        private static string BestTimeKey(int levelIndex) => "word_sort.best_time." + levelIndex;
 
         private static string BonusTubeKey(int levelIndex) => "word_sort.bonus_tube." + levelIndex;
 
